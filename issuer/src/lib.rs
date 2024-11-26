@@ -4,7 +4,9 @@ mod init_upgrade;
 use base64::Engine;
 use candid::{candid_method, Principal, CandidType, Deserialize};
 use ic_canister_sig_creation::signature_map::{CanisterSigInputs, SignatureMap, LABEL_SIG};
-use ic_canister_sig_creation::CanisterSigPublicKey;
+use ic_canister_sig_creation::{
+    extract_raw_root_pk_from_der, CanisterSigPublicKey, IC_ROOT_PK_DER,
+};
 use ic_cdk::api::{set_certified_data, time};
 use ic_cdk::caller;
 use ic_cdk_macros::{query, update};
@@ -20,11 +22,10 @@ use ic_verifiable_credentials::{
     vc_jwt_to_jws, vc_signing_input, AliasTuple, CredentialParams,
     VC_SIGNING_INPUT_DOMAIN
 };
-use ic_stable_structures::{DefaultMemoryImpl, RestrictedMemory, StableBTreeMap};
+use ic_stable_structures::{DefaultMemoryImpl, RestrictedMemory, StableBTreeMap, StableCell};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::storable::{Storable, Bound};
 use std::borrow::Cow;
-use init_upgrade::Settings;
 use lazy_static::lazy_static;
 use serde_bytes::ByteBuf;
 use serde_json::Value;
@@ -37,6 +38,7 @@ const CREDENTIAL_URL_PREFIX: &str = "data:text/plain;charset=UTF-8,";
 const MINUTE_NS: u64 = 60 * 1_000_000_000;
 // The expiration of issued verifiable credentials.
 const VC_EXPIRATION_PERIOD_NS: u64 = 15 * MINUTE_NS;
+const PROD_II_CANISTER_ID: &str = "rdmx6-jaaaa-aaaaa-aaadq-cai";
 
 // Define a wrapper around `HashSet<Principal>`
 #[derive(Debug, Clone, Default, PartialEq, Eq, CandidType, Deserialize)]
@@ -45,7 +47,9 @@ pub struct UserSet(pub HashSet<Principal>);
 type CourseId = String;
 type CourseMap = StableBTreeMap<CourseId, UserSet, VirtualMemory<Memory>>;
 type Memory = RestrictedMemory<DefaultMemoryImpl>;
-const COURSE_MEMORY_ID: MemoryId = MemoryId::new(0);
+type ConfigCell = StableCell<IssuerConfig, Memory>;
+const COURSE_MEMORY_ID: MemoryId = MemoryId::new(0u8);
+
 
 impl Storable for UserSet {
     fn to_bytes(&self) -> Cow<[u8]> {
@@ -63,7 +67,7 @@ impl Storable for UserSet {
 thread_local! {
     /// Stable structures
     // Static configuration of the canister set by init() or post_upgrade().
-    static SETTINGS: RefCell<Option<Settings>> = const { RefCell::new(None) };
+    static CONFIG: RefCell<ConfigCell> = RefCell::new(ConfigCell::init(config_memory(), IssuerConfig::default()).expect("failed to initialize stable cell"));
 
     static MEMORY_MANAGER: RefCell<MemoryManager<Memory>> =
     RefCell::new(MemoryManager::init(managed_memory()));
@@ -79,6 +83,11 @@ thread_local! {
     static SIGNATURES : RefCell<SignatureMap> = RefCell::new(SignatureMap::default());
 }
 
+/// Reserve the first stable memory page for the configuration stable cell.
+fn config_memory() -> Memory {
+    RestrictedMemory::new(DefaultMemoryImpl::default(), 0..1)
+}
+
 /// All the stable memory after the first page is managed by MemoryManager
 fn managed_memory() -> Memory {
     RestrictedMemory::new(
@@ -91,6 +100,59 @@ lazy_static! {
     // Seed and public key used for signing the credentials.
     static ref CANISTER_SIG_SEED: Vec<u8> = hash_bytes("DacadeVcIssuer").to_vec();
     static ref CANISTER_SIG_PK: CanisterSigPublicKey = CanisterSigPublicKey::new(ic_cdk::id(), CANISTER_SIG_SEED.clone());
+}
+
+#[derive(CandidType, Deserialize)]
+struct IssuerConfig {
+    /// Root of trust for checking canister signatures.
+    ic_root_key_raw: Vec<u8>,
+    /// List of canister ids that are allowed to provide id alias credentials.
+    idp_canister_ids: Vec<Principal>,
+    /// The derivation origin to be used by the issuer.
+    derivation_origin: String,
+}
+
+impl Storable for IssuerConfig {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::Owned(candid::encode_one(self).expect("failed to encode IssuerConfig"))
+    }
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        candid::decode_one(&bytes).expect("failed to decode IssuerConfig")
+    }
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+impl Default for IssuerConfig {
+    fn default() -> Self {
+        let derivation_origin = format!("https://{}.icp0.io", ic_cdk::id().to_text());
+        Self {
+            ic_root_key_raw: extract_raw_root_pk_from_der(IC_ROOT_PK_DER)
+                .expect("failed to extract raw root pk from der"),
+            idp_canister_ids: vec![Principal::from_text(PROD_II_CANISTER_ID).unwrap()],
+            derivation_origin: derivation_origin.clone(),
+        }
+    }
+}
+
+impl From<IssuerInit> for IssuerConfig {
+    fn from(init: IssuerInit) -> Self {
+        Self {
+            ic_root_key_raw: extract_raw_root_pk_from_der(&init.ic_root_key_der)
+                .expect("failed to extract raw root pk from der"),
+            idp_canister_ids: init.idp_canister_ids,
+            derivation_origin: init.derivation_origin,
+        }
+    }
+}
+
+#[derive(CandidType, Deserialize)]
+struct IssuerInit {
+    /// Root of trust for checking canister signatures.
+    ic_root_key_der: Vec<u8>,
+    /// List of canister ids that are allowed to provide id alias credentials.
+    idp_canister_ids: Vec<Principal>,
+    /// The derivation origin to be used by the issuer.
+    derivation_origin: String,
 }
 
 fn hash_bytes(value: impl AsRef<[u8]>) -> Hash {
@@ -286,18 +348,16 @@ pub fn get_alias_tuple(
     expected_vc_subject: &Principal,
     current_time_ns: u128,
 ) -> Result<AliasTuple, IssueCredentialError> {
-    SETTINGS.with_borrow(|settings_opt| {
-        let settings = settings_opt
-            .as_ref()
-            .expect("Settings should be initialized");
+    CONFIG.with_borrow(|config| {
+        let config = config.get();
 
-        let ii_canister_id = Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap();
+        let ii_canister_id = &config.idp_canister_ids[0];
 
         get_verified_id_alias_from_jws(
             &alias.credential_jws,
             expected_vc_subject,
             &ii_canister_id,
-            &settings.ic_root_key_raw,
+            &config.ic_root_key_raw,
             current_time_ns,
         )
         .map_err(|_| {
