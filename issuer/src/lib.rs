@@ -20,6 +20,8 @@ use ic_verifiable_credentials::{
     vc_jwt_to_jws, vc_signing_input, AliasTuple, CredentialParams,
     VC_SIGNING_INPUT_DOMAIN
 };
+use ic_stable_structures::{DefaultMemoryImpl, RestrictedMemory, StableBTreeMap};
+use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::storable::{Storable, Bound};
 use std::borrow::Cow;
 use init_upgrade::Settings;
@@ -40,6 +42,11 @@ const VC_EXPIRATION_PERIOD_NS: u64 = 15 * MINUTE_NS;
 #[derive(Debug, Clone, Default, PartialEq, Eq, CandidType, Deserialize)]
 pub struct UserSet(pub HashSet<Principal>);
 
+type CourseId = String;
+type CourseMap = StableBTreeMap<CourseId, UserSet, VirtualMemory<Memory>>;
+type Memory = RestrictedMemory<DefaultMemoryImpl>;
+const COURSE_MEMORY_ID: MemoryId = MemoryId::new(0);
+
 impl Storable for UserSet {
     fn to_bytes(&self) -> Cow<[u8]> {
         let serialized = candid::encode_one(self).expect("Failed to serialize UserSet");
@@ -54,26 +61,35 @@ impl Storable for UserSet {
 }
 
 thread_local! {
+    /// Stable structures
+    // Static configuration of the canister set by init() or post_upgrade().
+    static SETTINGS: RefCell<Option<Settings>> = const { RefCell::new(None) };
+
+    static MEMORY_MANAGER: RefCell<MemoryManager<Memory>> =
+    RefCell::new(MemoryManager::init(managed_memory()));
+
+    static COURSE_COMPLETIONS: RefCell<CourseMap> = RefCell::new(
+        StableBTreeMap::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(COURSE_MEMORY_ID)),
+        )
+    );
+
     /// Non-stable structures
     // Canister signatures
     static SIGNATURES : RefCell<SignatureMap> = RefCell::new(SignatureMap::default());
+}
 
-    static SETTINGS: RefCell<Option<Settings>> = const { RefCell::new(None) };
-
-    static COURSE_COMPLETIONS : RefCell<HashMap<String, HashSet<Principal>>> = RefCell::new({
-        let mut map = HashMap::new();
-        map.insert("typescript-smart-contract-101".to_string().to_ascii_uppercase(), HashSet::new());
-        map.insert("typescript-development-201".to_string().to_ascii_uppercase(), HashSet::new());
-        map.insert("rust-smart-contract-101".to_string().to_ascii_uppercase(), HashSet::new());
-        map.insert("ai-dapp-development-101".to_string().to_ascii_uppercase(), HashSet::new());
-        map.insert("icvr-development-101".to_string().to_ascii_uppercase(), HashSet::new());
-        map
-    })
+/// All the stable memory after the first page is managed by MemoryManager
+fn managed_memory() -> Memory {
+    RestrictedMemory::new(
+        DefaultMemoryImpl::default(),
+        1..ic_stable_structures::MAX_PAGES,
+    )
 }
 
 lazy_static! {
     // Seed and public key used for signing the credentials.
-    static ref CANISTER_SIG_SEED: Vec<u8> = hash_bytes("DummyIssuer").to_vec();
+    static ref CANISTER_SIG_SEED: Vec<u8> = hash_bytes("DacadeVcIssuer").to_vec();
     static ref CANISTER_SIG_PK: CanisterSigPublicKey = CanisterSigPublicKey::new(ic_cdk::id(), CANISTER_SIG_SEED.clone());
 }
 
