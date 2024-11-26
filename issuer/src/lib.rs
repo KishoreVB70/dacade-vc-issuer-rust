@@ -1,6 +1,5 @@
 use ic_cdk::export_candid;
-use crate::init_upgrade::SettingsInput;
-mod init_upgrade;
+use ic_cdk::{init, post_upgrade};
 use base64::Engine;
 use candid::{candid_method, Principal, CandidType, Deserialize};
 use ic_canister_sig_creation::signature_map::{CanisterSigInputs, SignatureMap, LABEL_SIG};
@@ -184,6 +183,25 @@ pub fn format_credential_spec(spec: &CredentialSpec) -> String {
     }
 
     description
+}
+
+#[init]
+#[candid_method(init)]
+fn init(init_arg: Option<IssuerInit>) {
+    if let Some(init) = init_arg {
+        apply_config(init);
+    };
+}
+
+fn apply_config(init: IssuerInit) {
+    CONFIG
+        .with_borrow_mut(|config_cell| config_cell.set(IssuerConfig::from(init)))
+        .expect("failed to apply issuer config");
+}
+
+#[post_upgrade]
+fn post_upgrade(init_arg: Option<IssuerInit>) {
+    init(init_arg);
 }
 
 #[update]
