@@ -236,7 +236,11 @@ fn add_course_completion(course_id: String) -> Result<String, String> {
                 course_id_upper
             ))
         } else {
-            Err(format!("Course '{}' not found", course_id))
+            Ok(format!(
+                "User '{}' is already in course '{}'.",
+                user.to_text(),
+                course_id_upper
+            ))
         }
     })
 }
