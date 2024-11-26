@@ -1192,6 +1192,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-stable-structures"
+version = "0.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fcaf89c1bc326c72498bcc0cd954f2edf718c018e7c586d2193d701d3c9af29a"
+dependencies = [
+ "ic_principal",
+]
+
+[[package]]
 name = "ic-verifiable-credentials"
 version = "0.1.0"
 dependencies = [
@@ -1420,6 +1429,7 @@ dependencies = [
  "ic-cdk-macros 0.15.0",
  "ic-certification",
  "ic-crypto-getrandom-for-wasm",
+ "ic-stable-structures",
  "ic-verifiable-credentials",
  "lazy_static",
  "pocket-ic",

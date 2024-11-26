@@ -29,6 +29,7 @@ ic-http-certification = "2.5"
 ic-verifiable-credentials = { path = "rust-packages/ic-verifiable-credentials" }
 ic-canister-sig-creation = "1.1"
 ic-signature-verification = "0.1.0"
+ic-stable-structures = "0.6"
 
 [workspace.dependencies.serde]
 version = "1.0"
