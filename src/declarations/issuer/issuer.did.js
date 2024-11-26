@@ -1,6 +1,7 @@
 export const idlFactory = ({ IDL }) => {
-  const SettingsInput = IDL.Record({
-    'ii_canister_id' : IDL.Principal,
+  const IssuerInit = IDL.Record({
+    'derivation_origin' : IDL.Text,
+    'idp_canister_ids' : IDL.Vec(IDL.Principal),
     'ic_root_key_der' : IDL.Vec(IDL.Nat8),
   });
   const Result = IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text });
@@ -74,6 +75,7 @@ export const idlFactory = ({ IDL }) => {
     'Err' : Icrc21Error,
   });
   return IDL.Service({
+    'add_course' : IDL.Func([IDL.Text], [Result], []),
     'add_course_completion' : IDL.Func([IDL.Text], [Result], []),
     'derivation_origin' : IDL.Func([DerivationOriginRequest], [Result_1], []),
     'get_credential' : IDL.Func([GetCredentialRequest], [Result_2], ['query']),
@@ -92,9 +94,10 @@ export const idlFactory = ({ IDL }) => {
   });
 };
 export const init = ({ IDL }) => {
-  const SettingsInput = IDL.Record({
-    'ii_canister_id' : IDL.Principal,
+  const IssuerInit = IDL.Record({
+    'derivation_origin' : IDL.Text,
+    'idp_canister_ids' : IDL.Vec(IDL.Principal),
     'ic_root_key_der' : IDL.Vec(IDL.Nat8),
   });
-  return [SettingsInput];
+  return [IDL.Opt(IssuerInit)];
 };

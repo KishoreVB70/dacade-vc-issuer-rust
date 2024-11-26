@@ -205,20 +205,23 @@ fn post_upgrade(init_arg: Option<IssuerInit>) {
 }
 
 #[update]
+#[candid_method]
 fn add_course(course_id: String) -> Result<String, String> {
     COURSE_COMPLETIONS.with(|courses| {
+        let course_id_upper = course_id.to_ascii_uppercase();
         let mut courses = courses.borrow_mut();
 
         // Check if the course already exists
-        if courses.contains_key(&course_id) {
-            return Err(format!("Course '{}' already exists.", course_id));
+        if courses.contains_key(&course_id_upper) {
+            return Err(format!("Course '{}' already exists.", course_id_upper));
         }
 
         // Insert the new course with an empty UserSet
-        courses.insert(course_id.clone(), UserSet(HashSet::new()))
-            .ok_or_else(|| format!("Failed to add course '{}': Insert failed.", course_id))?;
-
-        Ok(format!("Course '{}' added successfully.", course_id))
+        if let Some(_) = courses.insert(course_id_upper.clone(), UserSet(HashSet::new())) {
+            Err(format!("Failed to add course '{}': Key already exists.", course_id_upper))
+        } else {
+            Ok(format!("Course '{}' added successfully.", course_id_upper))
+        }
     })
 }
 
@@ -292,8 +295,6 @@ fn get_ii_id() -> String {
         return String::from(ii_canister_id.to_text());
     })
 }
-
-
 
 #[update]
 #[candid_method]

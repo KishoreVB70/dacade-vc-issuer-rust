@@ -39,6 +39,11 @@ export type IssueCredentialError = { 'Internal' : string } |
   { 'UnknownSubject' : string } |
   { 'UnsupportedCredentialSpec' : string };
 export interface IssuedCredentialData { 'vc_jws' : string }
+export interface IssuerInit {
+  'derivation_origin' : string,
+  'idp_canister_ids' : Array<Principal>,
+  'ic_root_key_der' : Uint8Array | number[],
+}
 export interface PrepareCredentialRequest {
   'signed_id_alias' : SignedIdAlias,
   'credential_spec' : CredentialSpec,
@@ -56,12 +61,9 @@ export type Result_3 = { 'Ok' : PreparedCredentialData } |
   { 'Err' : IssueCredentialError };
 export type Result_4 = { 'Ok' : Icrc21ConsentInfo } |
   { 'Err' : Icrc21Error };
-export interface SettingsInput {
-  'ii_canister_id' : Principal,
-  'ic_root_key_der' : Uint8Array | number[],
-}
 export interface SignedIdAlias { 'credential_jws' : string }
 export interface _SERVICE {
+  'add_course' : ActorMethod<[string], Result>,
   'add_course_completion' : ActorMethod<[string], Result>,
   'derivation_origin' : ActorMethod<[DerivationOriginRequest], Result_1>,
   'get_credential' : ActorMethod<[GetCredentialRequest], Result_2>,

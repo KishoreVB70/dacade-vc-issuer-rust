@@ -35,6 +35,11 @@ type IssueCredentialError = variant {
   UnsupportedCredentialSpec : text;
 };
 type IssuedCredentialData = record { vc_jws : text };
+type IssuerInit = record {
+  derivation_origin : text;
+  idp_canister_ids : vec principal;
+  ic_root_key_der : blob;
+};
 type PrepareCredentialRequest = record {
   signed_id_alias : SignedIdAlias;
   credential_spec : CredentialSpec;
@@ -54,12 +59,9 @@ type Result_3 = variant {
   Err : IssueCredentialError;
 };
 type Result_4 = variant { Ok : Icrc21ConsentInfo; Err : Icrc21Error };
-type SettingsInput = record {
-  ii_canister_id : principal;
-  ic_root_key_der : blob;
-};
 type SignedIdAlias = record { credential_jws : text };
-service : (SettingsInput) -> {
+service : (opt IssuerInit) -> {
+  add_course : (text) -> (Result);
   add_course_completion : (text) -> (Result);
   derivation_origin : (DerivationOriginRequest) -> (Result_1);
   get_credential : (GetCredentialRequest) -> (Result_2) query;
