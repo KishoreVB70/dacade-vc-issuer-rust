@@ -2,7 +2,7 @@ use ic_cdk::export_candid;
 use crate::init_upgrade::SettingsInput;
 mod init_upgrade;
 use base64::Engine;
-use candid::{candid_method, Principal};
+use candid::{candid_method, Principal, CandidType, Deserialize};
 use ic_canister_sig_creation::signature_map::{CanisterSigInputs, SignatureMap, LABEL_SIG};
 use ic_canister_sig_creation::CanisterSigPublicKey;
 use ic_cdk::api::{set_certified_data, time};
@@ -20,6 +20,8 @@ use ic_verifiable_credentials::{
     vc_jwt_to_jws, vc_signing_input, AliasTuple, CredentialParams,
     VC_SIGNING_INPUT_DOMAIN
 };
+use ic_stable_structures::storable::{Storable, Bound};
+use std::borrow::Cow;
 use init_upgrade::Settings;
 use lazy_static::lazy_static;
 use serde_bytes::ByteBuf;
@@ -33,6 +35,23 @@ const CREDENTIAL_URL_PREFIX: &str = "data:text/plain;charset=UTF-8,";
 const MINUTE_NS: u64 = 60 * 1_000_000_000;
 // The expiration of issued verifiable credentials.
 const VC_EXPIRATION_PERIOD_NS: u64 = 15 * MINUTE_NS;
+
+// Define a wrapper around `HashSet<Principal>`
+#[derive(Debug, Clone, Default, PartialEq, Eq, CandidType, Deserialize)]
+pub struct UserSet(pub HashSet<Principal>);
+
+impl Storable for UserSet {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        let serialized = candid::encode_one(self).expect("Failed to serialize UserSet");
+        Cow::Owned(serialized)
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        candid::decode_one(&bytes).expect("Failed to deserialize UserSet")
+    }
+
+    const BOUND: Bound = Bound::Unbounded; // Specify that the size is dynamic
+}
 
 thread_local! {
     /// Non-stable structures
