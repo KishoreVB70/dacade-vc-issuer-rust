@@ -16,9 +16,12 @@ II_CANISTER_ID="be2us-64aaa-aaaaa-qaabq-cai"
 
 echo "${II_CANISTER_ID}"
 
-dfx deploy issuer --network local --argument "( \
-    record { \
-        ii_canister_id = principal \"${II_CANISTER_ID}\"; \
-        ic_root_key_der = vec ${rootkey_did}; \
-    } \
-)"
+ISSUER_DERIVATION_ORIGIN="https://rp-dacade-demo.netlify.app"
+
+dfx deploy issuer --network local --argument '(
+    opt record { 
+        idp_canister_ids = vec{ principal "'"$II_CANISTER_ID"'" }; 
+        ic_root_key_der = vec '"$rootkey_did"'; 
+        derivation_origin = "'"$ISSUER_DERIVATION_ORIGIN"'" 
+        }
+    )'

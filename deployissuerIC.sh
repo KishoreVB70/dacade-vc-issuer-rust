@@ -13,12 +13,14 @@ rootkey_did=$(dfx ping ic \
 echo "Public key: ${rootkey_did}"
 
 II_CANISTER_ID=$(dfx canister id internet_identity --network ic)
+ISSUER_DERIVATION_ORIGIN="https://rp-dacade-demo.netlify.app"
 
 echo "Internet identity canister: ${II_CANISTER_ID}"
 
-dfx deploy issuer --network ic --argument "( \
-    record { \
-        ii_canister_id = principal \"${II_CANISTER_ID}\"; \
-        ic_root_key_der = vec ${rootkey_did}; \
-    } \
-)"
+dfx deploy issuer --network ic --argument '(
+    opt record { 
+        idp_canister_ids = vec{ principal "'"$II_CANISTER_ID"'" }; 
+        ic_root_key_der = vec '"$rootkey_did"'; 
+        derivation_origin = "'"$ISSUER_DERIVATION_ORIGIN"'" 
+        }
+    )'
