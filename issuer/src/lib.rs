@@ -244,11 +244,18 @@ fn add_course_completion(course_id: String) -> Result<String, String> {
 #[query]
 #[candid_method]
 fn has_completed_course(course_id: String, user_id: Principal) -> bool {
-    let course_id_up = course_id.to_ascii_uppercase();
-    COURSE_COMPLETIONS.with(|completions: &RefCell<HashMap<String, HashSet<Principal>>>| {
-        if let Some(users) = completions.borrow().get(&course_id_up) {
-            users.contains(&user_id)
+    COURSE_COMPLETIONS.with(|courses| {
+        let courses = courses.borrow();
+
+        // Convert course_id to uppercase for consistent lookups
+        let course_id_upper = course_id.to_ascii_uppercase();
+
+        // Retrieve the UserSet for the given course_id
+        if let Some(user_set) = courses.get(&course_id_upper) {
+            // Check if the user_id exists in the UserSet
+            user_set.0.contains(&user_id)
         } else {
+            // Return false if the course does not exist
             false
         }
     })
@@ -257,12 +264,10 @@ fn has_completed_course(course_id: String, user_id: Principal) -> bool {
 #[query]
 #[candid_method]
 fn get_ii_id() -> String {
-    SETTINGS.with_borrow(|settings_opt| {
-        let settings = settings_opt
-            .as_ref()
-            .expect("Settings should be initialized");
-        
-        return String::from(settings.ii_canister_id.to_text());
+    CONFIG.with_borrow(|config| {
+        let config = config.get();
+        let ii_canister_id = &config.idp_canister_ids[0];
+        return String::from(ii_canister_id.to_text());
     })
 }
 
