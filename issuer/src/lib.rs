@@ -30,7 +30,7 @@ use serde_bytes::ByteBuf;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 const ISSUER_URL: &str = "https://dacade.org";
 const CREDENTIAL_URL_PREFIX: &str = "data:text/plain;charset=UTF-8,";
@@ -292,6 +292,8 @@ fn get_ii_id() -> String {
         return String::from(ii_canister_id.to_text());
     })
 }
+
+
 
 #[update]
 #[candid_method]
