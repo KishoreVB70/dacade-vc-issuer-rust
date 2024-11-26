@@ -207,13 +207,34 @@ fn add_course(course_id: String) -> Result<String, String> {
 #[update]
 #[candid_method]
 fn add_course_completion(course_id: String) -> Result<String, String> {
-    let course_id_up = course_id.to_ascii_uppercase();
-    let user_id = caller();
-    COURSE_COMPLETIONS.with(|completions| {
-        let mut completions = completions.borrow_mut();
-        if let Some(users) = completions.get_mut(&course_id_up) {
-            users.insert(user_id);
-            Ok(format!("Course completion added for '{}'  ", user_id.to_text()))
+    let user = caller();
+    COURSE_COMPLETIONS.with(|courses| {
+        let mut courses = courses.borrow_mut();
+
+        // Convert course_id to uppercase
+        let course_id_upper = course_id.to_ascii_uppercase();
+
+        // Get the existing UserSet for the course
+        let mut user_set = courses
+            .get(&course_id_upper)
+            .map(|u| u.clone())
+            .ok_or_else(|| format!("Course '{}' does not exist.", course_id_upper))?;
+
+        // Add the user to the UserSet
+        if user_set.0.insert(user) {
+            // Write the modified UserSet back into the map
+            courses.insert(course_id_upper.clone(), user_set).ok_or_else(|| {
+                format!(
+                    "Failed to update course '{}': StableBTreeMap insertion error.",
+                    course_id_upper
+                )
+            })?;
+
+            Ok(format!(
+                "User '{}' added to course '{}'.",
+                user.to_text(),
+                course_id_upper
+            ))
         } else {
             Err(format!("Course '{}' not found", course_id))
         }
