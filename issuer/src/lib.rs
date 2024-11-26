@@ -187,6 +187,24 @@ pub fn format_credential_spec(spec: &CredentialSpec) -> String {
 }
 
 #[update]
+fn add_course(course_id: String) -> Result<String, String> {
+    COURSE_COMPLETIONS.with(|courses| {
+        let mut courses = courses.borrow_mut();
+
+        // Check if the course already exists
+        if courses.contains_key(&course_id) {
+            return Err(format!("Course '{}' already exists.", course_id));
+        }
+
+        // Insert the new course with an empty UserSet
+        courses.insert(course_id.clone(), UserSet(HashSet::new()))
+            .ok_or_else(|| format!("Failed to add course '{}': Insert failed.", course_id))?;
+
+        Ok(format!("Course '{}' added successfully.", course_id))
+    })
+}
+
+#[update]
 #[candid_method]
 fn add_course_completion(course_id: String) -> Result<String, String> {
     let course_id_up = course_id.to_ascii_uppercase();
